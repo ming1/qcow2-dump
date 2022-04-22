@@ -466,3 +466,38 @@ class QcowHeader(Qcow2Struct):
             print('Header extension:')
             ex.dump()
             print()
+
+class Qcow2L1Entry(Qcow2Struct):
+    fields = (
+        ('u64',  '{:#x}', 'entry'),
+    )
+
+    L1_ENTRY_OFFSET_OF_L2_TABLE = 0x00fffffffffffe00
+    L1_ENTRY_REFCOUNT_ONE = 0x8000000000000000
+
+    def __init__(self, seq, data):
+        super().__init__(data = data)
+        self.seq = seq
+        self.offset = (self.entry & self.L1_ENTRY_OFFSET_OF_L2_TABLE);
+        self.refcount_one = (self.entry & self.L1_ENTRY_REFCOUNT_ONE) >> 63;
+
+    def is_allocated(self):
+        return self.offset != 0
+
+    def __str__(self):
+        return "#{}: 0x{:x} offset 0x{:x} refcount one {}".format(
+                self.seq, self.entry,
+                self.offset, self.refcount_one)
+
+class Qcow2State():
+    def __init__(self, fd):
+        self.header = QcowHeader(fd = fd)
+        self.fd = fd
+
+    def dump_L1(self):
+        fd = self.fd
+        fd.seek(self.header.l1_table_offset)
+        for i in range(self.header.l1_size):
+            data = fd.read(8)
+            l1_entry = Qcow2L1Entry(i, data)
+            print(l1_entry)

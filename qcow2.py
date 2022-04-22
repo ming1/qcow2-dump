@@ -22,12 +22,17 @@ import sys
 
 from qcow2_format import (
     QcowHeader,
-    QcowHeaderExtension
+    QcowHeaderExtension,
+    Qcow2State
 )
 
 
 is_json = False
 
+def cmd_dump_l1_table(fd):
+    qs = Qcow2State(fd)
+    qs.dump_L1()
+    print()
 
 def cmd_dump_header(fd):
     h = QcowHeader(fd)
@@ -133,6 +138,7 @@ cmds = [
      'Add a header extension, data from stdin'],
     ['del-header-ext', cmd_del_header_ext, 1, 'Delete a header extension'],
     ['set-feature-bit', cmd_set_feature_bit, 2, 'Set a feature bit'],
+    ['dump-l1-table', cmd_dump_l1_table, 0, 'Dump L1 table'],
 ]
 
 
