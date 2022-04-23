@@ -34,6 +34,11 @@ def cmd_dump_l1_table(fd):
     qs.dump_L1_table()
     print()
 
+def cmd_dump_refcount_table(fd):
+    qs = Qcow2State(fd)
+    qs.dump_refcount_table()
+    print()
+
 def cmd_dump_l2_table(fd, seq):
     qs = Qcow2State(fd)
     
@@ -42,6 +47,16 @@ def cmd_dump_l2_table(fd, seq):
     else:
         for i in range(qs.header.l1_size):
             qs.dump_L2_table(i)
+    print()
+
+def cmd_dump_refcount_blk(fd, seq):
+    qs = Qcow2State(fd)
+    
+    if int(seq) >= 0:
+        qs.dump_refcount_blk(int(seq))
+    else:
+        for i in range(qs.max_refcount_table_entries):
+            qs.dump_refcount_blk(i)
     print()
 
 def cmd_dump_header(fd):
@@ -150,8 +165,9 @@ cmds = [
     ['set-feature-bit', cmd_set_feature_bit, 2, 'Set a feature bit'],
     ['dump-l1-table', cmd_dump_l1_table, 0, 'Dump L1 table'],
     ['dump-l2-table', cmd_dump_l2_table, 1, 'Dump L2 table'],
+    ['dump-refcount-table', cmd_dump_refcount_table, 0, 'Dump refcount table'],
+    ['dump-refcount-blk', cmd_dump_refcount_blk, 1, 'Dump refcount block'],
 ]
-
 
 def main(filename, cmd, args):
     fd = open(filename, "r+b")
