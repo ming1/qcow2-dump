@@ -467,6 +467,44 @@ class QcowHeader(Qcow2Struct):
             ex.dump()
             print()
 
+class Qcow2L2Entry(Qcow2Struct):
+    fields = (
+        ('u64',  '{:#x}', 'entry'),
+    )
+
+    L2_ENTRY_REFCOUNT_ONE = 0x8000000000000000
+    L2_ENTRY_COMPRESSED = 0x4000000000000000
+    L2_ENTRY_OFFSET_OF_CLUSTER = 0x00fffffffffffe00
+    L2_ENTRY_READ_AS_ALL_ZEROS = 0x1
+
+    def __init__(self, seq, data, header):
+        super().__init__(data = data)
+        self.seq = seq
+
+        self.refcount_one = (self.entry & self.L2_ENTRY_REFCOUNT_ONE) >> 63
+        self.compressed = (self.entry & self.L2_ENTRY_COMPRESSED) >> 62
+
+        if self.compressed:
+            bits = 62 + 8 - header.cluster_bits 
+            self.cluster_offset = self.entry & ((1 << bits) - 1)
+            self.nr_sectors = (self.entry & (~((1 << bits) - 1))) >> bits
+        else:
+            self.read_as_all_zeros = self.entry & self.L2_ENTRY_READ_AS_ALL_ZEROS
+            self.cluster_offset = self.entry & self.L2_ENTRY_OFFSET_OF_CLUSTER
+
+    def is_allocated(self):
+        return self.entry != 0
+
+    def __str__(self):
+        if self.compressed:
+            return "#{:04}: 0x{:16x} offset 0x{:16x} sectors {} refcount one {}".format(
+                self.seq, self.entry,
+                self.cluster_offset, self.nr_sectors, self.refcount_one)
+        else:
+            return "#{:04}: 0x{:16x} offset 0x{:16x} read_as_zeros {} refcount one {}".format(
+                self.seq, self.entry,
+                self.cluster_offset, self.read_as_all_zeros, self.refcount_one)
+
 class Qcow2L1Entry(Qcow2Struct):
     fields = (
         ('u64',  '{:#x}', 'entry'),
@@ -482,7 +520,7 @@ class Qcow2L1Entry(Qcow2Struct):
         self.refcount_one = (self.entry & self.L1_ENTRY_REFCOUNT_ONE) >> 63;
 
     def is_allocated(self):
-        return self.offset != 0
+        return self.entry != 0
 
     def __str__(self):
         return "#{}: 0x{:x} offset 0x{:x} refcount one {}".format(
@@ -493,11 +531,31 @@ class Qcow2State():
     def __init__(self, fd):
         self.header = QcowHeader(fd = fd)
         self.fd = fd
+        self.nr_l2_entry = self.header.cluster_size // 8; 
 
-    def dump_L1(self):
+    def L2_entries(self, seq):
+        fd = self.fd
+        fd.seek(self.header.l1_table_offset + seq * 8)
+        l1_entry = Qcow2L1Entry(seq, fd.read(8))
+        if l1_entry.is_allocated():
+            l2_offset = l1_entry.offset
+            fd.seek(l2_offset)
+            for i in range(self.nr_l2_entry):
+                yield Qcow2L2Entry(i, fd.read(8), self.header)
+
+    def L1_entries(self):
         fd = self.fd
         fd.seek(self.header.l1_table_offset)
         for i in range(self.header.l1_size):
-            data = fd.read(8)
-            l1_entry = Qcow2L1Entry(i, data)
+            yield Qcow2L1Entry(i, fd.read(8))
+
+    def dump_L1_table(self):
+        for l1_entry in self.L1_entries():
             print(l1_entry)
+
+    def dump_L2_table(self, seq):
+        if seq < self.header.l1_size:
+            print("L2 table in seq ", seq)
+            for l2_entry in self.L2_entries(seq):
+                if l2_entry.is_allocated():
+                    print(l2_entry)

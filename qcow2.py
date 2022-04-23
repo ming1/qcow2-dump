@@ -31,7 +31,17 @@ is_json = False
 
 def cmd_dump_l1_table(fd):
     qs = Qcow2State(fd)
-    qs.dump_L1()
+    qs.dump_L1_table()
+    print()
+
+def cmd_dump_l2_table(fd, seq):
+    qs = Qcow2State(fd)
+    
+    if int(seq) >= 0:
+        qs.dump_L2_table(int(seq))
+    else:
+        for i in range(qs.header.l1_size):
+            qs.dump_L2_table(i)
     print()
 
 def cmd_dump_header(fd):
@@ -139,6 +149,7 @@ cmds = [
     ['del-header-ext', cmd_del_header_ext, 1, 'Delete a header extension'],
     ['set-feature-bit', cmd_set_feature_bit, 2, 'Set a feature bit'],
     ['dump-l1-table', cmd_dump_l1_table, 0, 'Dump L1 table'],
+    ['dump-l2-table', cmd_dump_l2_table, 1, 'Dump L2 table'],
 ]
 
 
