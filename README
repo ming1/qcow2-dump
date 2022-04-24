@@ -1,0 +1,10 @@
+One collection utilities for dumping qcow2:
+
+dump-qcow2.pl:
+	https://lists.gnu.org/archive/html/qemu-devel/2018-04/msg01943.html
+
+qcow2-dump:
+	https://github.com/zhangyoujia/qcow2-dump
+
+qcow2.py/qcow2_format.py:
+	https://github.com/qemu/qemu/tree/master/tests/qemu-iotests	
