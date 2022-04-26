@@ -621,7 +621,8 @@ class Qcow2State():
 
     def dump_refcount_blk(self, seq):
         for refblk_entry in self.refcount_blk_entries(seq):
-            print(refblk_entry)
+            vm_addr = (seq * self.nr_refcount_blk_entry + refblk_entry.seq) << self.header.cluster_bits
+            print("addr 0x{:x} -> {} ".format(vm_addr, refblk_entry))
 
     def dump_L1_table(self):
         for l1_entry in self.L1_entries():
@@ -632,4 +633,5 @@ class Qcow2State():
             print("L2 table in seq ", seq)
             for l2_entry in self.L2_entries(seq):
                 if l2_entry.is_allocated():
-                    print(l2_entry)
+                    vm_addr = (seq * self.nr_l2_entry + l2_entry.seq) << self.header.cluster_bits
+                    print("addr 0x{:x} -> {} ".format(vm_addr, l2_entry))
