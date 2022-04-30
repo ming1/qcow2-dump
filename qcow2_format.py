@@ -21,6 +21,9 @@ import struct
 import string
 import json
 
+from utils import (
+    LRUCache
+)
 
 class ComplexEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -562,7 +565,28 @@ refcnt_blk_fmt = {
     64: 'Q',
 }
 
+class QcowCacheSlice():
+    def __init__(self, vm_addr, buf):
+        self.vm_addr = vm_addr
+        self.buf = buf
+
+class QcowL2Slice(QcowCacheSlice):
+    def __init__(self, vm_addr, buf, start):
+        super().__init__(vm_addr, buf)
+        self.dirty = False
+        self.start = start
+
+class QcowRefcountBlkSlice(QcowCacheSlice):
+    def __init__(self, vm_addr, buf, cnt):
+        super().__init__(vm_addr, buf)
+        self.cnt = cnt
+        self.dirty = False
+
 class Qcow2State():
+    L2_CACHE_SIZE = 1024 * 1024
+    L2_CACHE_SLICE_BITS = 12
+    REFCOUNT_BLK_CACHE_SIZE = 1024 * 1024
+    REFCOUNT_BLK_CACHE_SLICE_BITS = 12
     def __init__(self, fd):
         self.header = QcowHeader(fd = fd)
         self.fd = fd
@@ -584,6 +608,10 @@ class Qcow2State():
         fd.seek(self.header.refcount_table_offset)
         self.refcount_table = fd.read(self.header.cluster_size *
                 self.header.refcount_table_clusters)
+
+        self.l2_cache = LRUCache(self.L2_CACHE_SIZE >> self.L2_CACHE_SLICE_BITS)
+        self.refcnt_blk_cache = LRUCache(self.REFCOUNT_BLK_CACHE_SIZE >> self.REFCOUNT_BLK_CACHE_SLICE_BITS)
+
     def L2_entries(self, seq):
         fd = self.fd
         fd.seek(self.header.l1_table_offset + seq * 8)
@@ -642,3 +670,29 @@ class Qcow2State():
                 if l2_entry.is_allocated():
                     vm_addr = (seq * self.nr_l2_entry + l2_entry.seq) << self.header.cluster_bits
                     print("addr 0x{:x} -> {} ".format(vm_addr, l2_entry))
+
+    def translate_guest_addr(self, guest_addr):
+        slice_addr = guest_addr & ~(1 << self.L2_CACHE_SLICE_BITS - 1)
+        if self.l2_cache.get(slice_addr) == -1:
+            l1_idx = (guest_addr >> self.header.cluster_bits) // self.nr_l2_entry 
+            l1_entry = Qcow2L1Entry(l1_idx, self.l1_table[l1_idx * 8: (l1_idx + 1) * 8])
+            if not l1_entry.is_allocated():
+                return -1
+            l2_idx = (guest_addr >> self.header.cluster_bits) % self.nr_l2_entry
+            slice_offset = (l1_entry.offset + l2_idx * 8) & ~(1 << self.L2_CACHE_SLICE_BITS - 1) 
+
+            start = (slice_offset - l1_entry.offset) // 8
+            self.fd.seek(slice_offset)
+            buf = bytearray(self.fd.read(1 << self.L2_CACHE_SLICE_BITS))
+
+            l2_slice = QcowL2Slice(slice_addr, buf, start)
+            self.l2_cache.put(slice_addr, l2_slice)
+
+        l2_slice =  self.l2_cache.get(slice_addr)
+        l2_idx = (guest_addr >> self.header.cluster_bits) % self.nr_l2_entry
+        my_buf = l2_slice.buf[(l2_idx - l2_slice.start) * 8: (l2_idx - l2_slice.start + 1) * 8]
+        l2_entry = Qcow2L2Entry(l2_idx, my_buf, self.header)
+        offset = guest_addr & ((1 << self.header.cluster_bits) - 1)
+        #print("{:x} {:x} {:x}".format(guest_addr, ((1 << self.header.cluster_bits) - 1), offset))
+        return l2_entry.cluster_offset + offset
+

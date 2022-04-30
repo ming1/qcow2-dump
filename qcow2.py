@@ -59,6 +59,12 @@ def cmd_dump_refcount_blk(fd, seq):
             qs.dump_refcount_blk(i)
     print()
 
+def cmd_translate_guest_addr(fd, guest_addr):
+    qs = Qcow2State(fd)
+    guest_addr = int(guest_addr, 16)
+    addr = qs.translate_guest_addr(guest_addr)
+    print("{:x}->{:x}".format(guest_addr, addr))
+
 def cmd_dump_header(fd):
     h = QcowHeader(fd)
     h.dump(is_json)
@@ -167,6 +173,7 @@ cmds = [
     ['dump-l2-table', cmd_dump_l2_table, 1, 'Dump L2 table'],
     ['dump-refcount-table', cmd_dump_refcount_table, 0, 'Dump refcount table'],
     ['dump-refcount-blk', cmd_dump_refcount_blk, 1, 'Dump refcount block'],
+    ['translate-guest-addr', cmd_translate_guest_addr, 1, 'translate guest addr'],
 ]
 
 def main(filename, cmd, args):
