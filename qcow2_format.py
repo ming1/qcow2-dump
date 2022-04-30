@@ -576,6 +576,14 @@ class Qcow2State():
         self.refcount_bits = refcount_bits
         self.nr_refcount_blk_entry = self.header.cluster_size  // (refcount_bits // 8)
 
+        #load L1 table
+        fd.seek(self.header.l1_table_offset)
+        self.l1_table = fd.read(self.header.l1_size * 8)
+
+        #load refcount table
+        fd.seek(self.header.refcount_table_offset)
+        self.refcount_table = fd.read(self.header.cluster_size *
+                self.header.refcount_table_clusters)
     def L2_entries(self, seq):
         fd = self.fd
         fd.seek(self.header.l1_table_offset + seq * 8)
@@ -587,16 +595,15 @@ class Qcow2State():
                 yield Qcow2L2Entry(i, fd.read(8), self.header)
 
     def L1_entries(self):
-        fd = self.fd
-        fd.seek(self.header.l1_table_offset)
         for i in range(self.header.l1_size):
-            yield Qcow2L1Entry(i, fd.read(8))
+            start = i * 8
+            yield Qcow2L1Entry(i, self.l1_table[start: start + 8])
 
     def refcount_table_entries(self):
         fd = self.fd
-        fd.seek(self.header.refcount_table_offset)
         for i in range(self.max_refcount_table_entries):
-            entry = Qcow2RefcountTableEntry(i, fd.read(8))
+            start = i * 8
+            entry = Qcow2RefcountTableEntry(i, self.refcount_table[start : start + 8])
             if entry.is_allocated():
                 yield entry
 
