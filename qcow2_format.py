@@ -567,19 +567,19 @@ refcnt_blk_fmt = {
 }
 
 class QcowCacheSlice():
-    def __init__(self, vm_addr, buf):
+    def __init__(self, vm_addr, buf, offset):
         self.vm_addr = vm_addr
         self.buf = buf
+        self.offset = offset
+        self.dirty = False
 
 class QcowL2Slice(QcowCacheSlice):
-    def __init__(self, vm_addr, buf):
-        super().__init__(vm_addr, buf)
-        self.dirty = False
+    def __init__(self, vm_addr, buf, offset):
+        super().__init__(vm_addr, buf, offset)
 
 class QcowRefcountBlkSlice(QcowCacheSlice):
-    def __init__(self, vm_addr, buf):
-        super().__init__(vm_addr, buf)
-        self.dirty = False
+    def __init__(self, vm_addr, buf, offset):
+        super().__init__(vm_addr, buf, offset)
 
 class Qcow2State():
     L2_CACHE_SIZE = 1024 * 1024
@@ -673,7 +673,7 @@ class Qcow2State():
             buf = bytearray(self.fd.read(1 << self.L2_CACHE_SLICE_BITS))
             #print("head l2_entry:{}".format(Qcow2L2Entry(slice_offset//8, buf[0:8], self.header)))
 
-            l2_slice = QcowL2Slice(slice_addr, buf)
+            l2_slice = QcowL2Slice(slice_addr, buf, slice_offset + l1_entry.offset)
             self.l2_cache.put(slice_addr, l2_slice)
 
         offset_in_slice = (l2_idx * 8) & ((1 << self.L2_CACHE_SLICE_BITS) - 1)
@@ -703,7 +703,7 @@ class Qcow2State():
 
             buf = bytearray(self.fd.read(1 << self.REFCOUNT_BLK_CACHE_SLICE_BITS))
 
-            refcnt_blk_slice = QcowRefcountBlkSlice(slice_addr, buf)
+            refcnt_blk_slice = QcowRefcountBlkSlice(slice_addr, buf, slice_offset + entry.offset)
             self.refcnt_blk_cache.put(slice_addr, refcnt_blk_slice)
 
         offset_in_slice = (refcnt_blk_idx * self.refcount_bits // 8) & ((1 << self.L2_CACHE_SLICE_BITS) - 1)
