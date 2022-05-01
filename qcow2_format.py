@@ -571,10 +571,9 @@ class QcowCacheSlice():
         self.buf = buf
 
 class QcowL2Slice(QcowCacheSlice):
-    def __init__(self, vm_addr, buf, start):
+    def __init__(self, vm_addr, buf):
         super().__init__(vm_addr, buf)
         self.dirty = False
-        self.start = start
 
 class QcowRefcountBlkSlice(QcowCacheSlice):
     def __init__(self, vm_addr, buf, cnt):
@@ -672,27 +671,30 @@ class Qcow2State():
                     print("addr 0x{:x} -> {} ".format(vm_addr, l2_entry))
 
     def translate_guest_addr(self, guest_addr):
-        slice_addr = guest_addr & ~(1 << self.L2_CACHE_SLICE_BITS - 1)
+        l2_idx = (guest_addr >> self.header.cluster_bits) % self.nr_l2_entry
+        slice_addr = guest_addr & ~((1 << self.L2_CACHE_SLICE_BITS) - 1)
+        #print("l2_idx {} slice_addr: {:x}".format(l2_idx, slice_addr))
         if self.l2_cache.get(slice_addr) == -1:
             l1_idx = (guest_addr >> self.header.cluster_bits) // self.nr_l2_entry 
             l1_entry = Qcow2L1Entry(l1_idx, self.l1_table[l1_idx * 8: (l1_idx + 1) * 8])
             if not l1_entry.is_allocated():
                 return -1
-            l2_idx = (guest_addr >> self.header.cluster_bits) % self.nr_l2_entry
-            slice_offset = (l1_entry.offset + l2_idx * 8) & ~(1 << self.L2_CACHE_SLICE_BITS - 1) 
 
-            start = (slice_offset - l1_entry.offset) // 8
-            self.fd.seek(slice_offset)
+            slice_offset = (l2_idx * 8) & ~((1 << self.L2_CACHE_SLICE_BITS) - 1)
+            #print("l1_entry:{} slice_offset {:x}".format(l1_entry, slice_offset))
+
+            self.fd.seek(slice_offset + l1_entry.offset)
             buf = bytearray(self.fd.read(1 << self.L2_CACHE_SLICE_BITS))
+            #print("head l2_entry:{}".format(Qcow2L2Entry(slice_offset//8, buf[0:8], self.header)))
 
-            l2_slice = QcowL2Slice(slice_addr, buf, start)
+            l2_slice = QcowL2Slice(slice_addr, buf)
             self.l2_cache.put(slice_addr, l2_slice)
 
-        l2_slice =  self.l2_cache.get(slice_addr)
-        l2_idx = (guest_addr >> self.header.cluster_bits) % self.nr_l2_entry
-        my_buf = l2_slice.buf[(l2_idx - l2_slice.start) * 8: (l2_idx - l2_slice.start + 1) * 8]
-        l2_entry = Qcow2L2Entry(l2_idx, my_buf, self.header)
-        offset = guest_addr & ((1 << self.header.cluster_bits) - 1)
-        #print("{:x} {:x} {:x}".format(guest_addr, ((1 << self.header.cluster_bits) - 1), offset))
-        return l2_entry.cluster_offset + offset
+        offset_in_slice = (l2_idx * 8) & ((1 << self.L2_CACHE_SLICE_BITS) - 1)
+        l2_slice = self.l2_cache.get(slice_addr)
+        l2_entry = Qcow2L2Entry(l2_idx, l2_slice.buf[offset_in_slice: offset_in_slice + 8],
+                self.header)
+
+        #print("offset_in_slice {:x} l2_entry:{}".format(offset_in_slice, l2_entry))
+        return l2_entry, (guest_addr & ((1 << self.header.cluster_bits) - 1))
 
