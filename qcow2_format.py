@@ -675,10 +675,13 @@ class Qcow2State():
         slice_addr = guest_addr & ~((1 << self.L2_CACHE_SLICE_BITS) - 1)
         #print("l2_idx {} slice_addr: {:x}".format(l2_idx, slice_addr))
         if self.l2_cache.get(slice_addr) == -1:
-            l1_idx = (guest_addr >> self.header.cluster_bits) // self.nr_l2_entry 
+            l1_idx = (guest_addr >> self.header.cluster_bits) // self.nr_l2_entry
+            if l1_idx >= self.header.l1_size:
+                return None, -1
+
             l1_entry = Qcow2L1Entry(l1_idx, self.l1_table[l1_idx * 8: (l1_idx + 1) * 8])
             if not l1_entry.is_allocated():
-                return -1
+                return None, -1
 
             slice_offset = (l2_idx * 8) & ~((1 << self.L2_CACHE_SLICE_BITS) - 1)
             #print("l1_entry:{} slice_offset {:x}".format(l1_entry, slice_offset))

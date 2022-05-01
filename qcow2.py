@@ -63,8 +63,11 @@ def cmd_translate_guest_addr(fd, guest_addr):
     qs = Qcow2State(fd)
     guest_addr = int(guest_addr, 16)
     l2_entry, offset = qs.translate_guest_addr(guest_addr)
-    print("0x{:x} -> 0x{:x}, l2_entry {}, offset_in_cluster 0x{:x}".format(
-        guest_addr, l2_entry.cluster_offset + offset, l2_entry, offset))
+    if l2_entry is None:
+        print("0x{:x}: unallocated address".format(guest_addr))
+    else:
+        print("0x{:x} -> 0x{:x}, l2_entry {}, offset_in_cluster 0x{:x}".format(
+            guest_addr, l2_entry.cluster_offset + offset, l2_entry, offset))
 
 def cmd_dump_header(fd):
     h = QcowHeader(fd)
