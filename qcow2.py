@@ -69,6 +69,12 @@ def cmd_translate_guest_addr(fd, guest_addr):
         print("0x{:x} -> 0x{:x}, l2_entry {}, offset_in_cluster 0x{:x}".format(
             guest_addr, l2_entry.cluster_offset + offset, l2_entry, offset))
 
+def cmd_get_guest_addr_refcount(fd, guest_addr):
+    qs = Qcow2State(fd)
+    guest_addr = int(guest_addr, 16)
+    refcnt = qs.get_guest_addr_refcount(guest_addr)
+    print("0x{:x}: {}".format(guest_addr, refcnt))
+
 def cmd_dump_header(fd):
     h = QcowHeader(fd)
     h.dump(is_json)
@@ -178,6 +184,7 @@ cmds = [
     ['dump-refcount-table', cmd_dump_refcount_table, 0, 'Dump refcount table'],
     ['dump-refcount-blk', cmd_dump_refcount_blk, 1, 'Dump refcount block'],
     ['translate-guest-addr', cmd_translate_guest_addr, 1, 'translate guest addr'],
+    ['refcnt-guest-addr', cmd_get_guest_addr_refcount, 1, 'get refcnt of cluster for guest addr'],
 ]
 
 def main(filename, cmd, args):

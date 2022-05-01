@@ -576,9 +576,8 @@ class QcowL2Slice(QcowCacheSlice):
         self.dirty = False
 
 class QcowRefcountBlkSlice(QcowCacheSlice):
-    def __init__(self, vm_addr, buf, cnt):
+    def __init__(self, vm_addr, buf):
         super().__init__(vm_addr, buf)
-        self.cnt = cnt
         self.dirty = False
 
 class Qcow2State():
@@ -701,3 +700,33 @@ class Qcow2State():
         #print("offset_in_slice {:x} l2_entry:{}".format(offset_in_slice, l2_entry))
         return l2_entry, (guest_addr & ((1 << self.header.cluster_bits) - 1))
 
+    #return the refcount_blk entry & refcount
+    def get_guest_addr_refcount(self, guest_addr):
+        refcnt_blk_idx = (guest_addr >> self.header.cluster_bits) % self.nr_refcount_blk_entry
+        slice_addr = guest_addr & ~((1 << self.REFCOUNT_BLK_CACHE_SLICE_BITS) - 1)
+        if self.refcnt_blk_cache.get(slice_addr) == -1:
+            refcnt_table_idx = (guest_addr >> self.header.cluster_bits) // self.nr_refcount_blk_entry
+            if refcnt_table_idx >= self.max_refcount_table_entries:
+                return -1
+
+            start = refcnt_table_idx * 8
+            entry = Qcow2RefcountTableEntry(refcnt_table_idx, self.refcount_table[start : start + 8])
+            if not entry.is_allocated():
+                return -1
+
+            slice_offset = (refcnt_blk_idx * self.refcount_bits // 8) & ~((1 << self.REFCOUNT_BLK_CACHE_SLICE_BITS) - 1)
+            self.fd.seek(slice_offset + entry.offset)
+
+            buf = bytearray(self.fd.read(1 << self.REFCOUNT_BLK_CACHE_SLICE_BITS))
+
+            refcnt_blk_slice = QcowRefcountBlkSlice(slice_addr, buf)
+            self.refcnt_blk_cache.put(slice_addr, refcnt_blk_slice)
+
+        offset_in_slice = (refcnt_blk_idx * self.refcount_bits // 8) & ((1 << self.L2_CACHE_SLICE_BITS) - 1)
+        refcnt_blk_slice = self.refcnt_blk_cache.get(slice_addr)
+
+        ref_fmt = '>' + refcnt_blk_fmt[self.refcount_bits]
+        buf_size = struct.calcsize(ref_fmt)
+        refcnt = struct.unpack(ref_fmt, refcnt_blk_slice.buf[offset_in_slice: offset_in_slice + buf_size])
+
+        return refcnt[0]
