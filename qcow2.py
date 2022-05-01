@@ -31,32 +31,52 @@ is_json = False
 
 def cmd_dump_l1_table(fd):
     qs = Qcow2State(fd)
-    qs.dump_L1_table()
+    for l1_entry in qs.L1_entries():
+        print(l1_entry)
     print()
 
 def cmd_dump_refcount_table(fd):
     qs = Qcow2State(fd)
-    qs.dump_refcount_table()
+    for entry in qs.refcount_table_entries():
+        if entry.is_allocated():
+            print(entry)
     print()
+
+def dump_l2_table(qs, seq):
+    if seq < qs.header.l1_size:
+        print("L2 table in seq ", seq)
+        for l2_entry in qs.L2_entries(seq):
+            if l2_entry.is_allocated():
+                vm_addr = (seq * qs.nr_l2_entry + l2_entry.seq) << qs.header.cluster_bits
+                print("addr 0x{:x} -> {} ".format(vm_addr, l2_entry))
 
 def cmd_dump_l2_table(fd, seq):
     qs = Qcow2State(fd)
+    seq = int(seq)
     
-    if int(seq) >= 0:
-        qs.dump_L2_table(int(seq))
+    if seq >= 0:
+        dump_l2_table(qs, seq)
     else:
         for i in range(qs.header.l1_size):
-            qs.dump_L2_table(i)
+            dump_l2_table(qs, i)
     print()
+
+def dump_refcount_blk(qs, seq):
+    #qs.dump_refcount_blk(seq)
+    for refblk_entry in qs.refcount_blk_entries(seq):
+        if refblk_entry.is_allocated():
+            vm_addr = (seq * qs.nr_refcount_blk_entry + refblk_entry.seq) << qs.header.cluster_bits
+            print("addr 0x{:x} -> {} ".format(vm_addr, refblk_entry))
 
 def cmd_dump_refcount_blk(fd, seq):
     qs = Qcow2State(fd)
+    seq = int(seq)
     
-    if int(seq) >= 0:
-        qs.dump_refcount_blk(int(seq))
+    if seq >= 0:
+        dump_refcount_blk(qs, seq)
     else:
         for i in range(qs.max_refcount_table_entries):
-            qs.dump_refcount_blk(i)
+            dump_refcount_blk(qs, i)
     print()
 
 def cmd_translate_guest_addr(fd, guest_addr):

@@ -653,29 +653,6 @@ class Qcow2State():
             entry = Qcow2RefcountBlockEntry(i, refcnt[0])
             yield entry
     
-    def dump_refcount_table(self):
-        for refblk_table_entry in self.refcount_table_entries():
-            if refblk_table_entry.is_allocated():
-                print(refblk_table_entry)
-
-    def dump_refcount_blk(self, seq):
-        for refblk_entry in self.refcount_blk_entries(seq):
-            if refblk_entry.is_allocated():
-                vm_addr = (seq * self.nr_refcount_blk_entry + refblk_entry.seq) << self.header.cluster_bits
-                print("addr 0x{:x} -> {} ".format(vm_addr, refblk_entry))
-
-    def dump_L1_table(self):
-        for l1_entry in self.L1_entries():
-            print(l1_entry)
-
-    def dump_L2_table(self, seq):
-        if seq < self.header.l1_size:
-            print("L2 table in seq ", seq)
-            for l2_entry in self.L2_entries(seq):
-                if l2_entry.is_allocated():
-                    vm_addr = (seq * self.nr_l2_entry + l2_entry.seq) << self.header.cluster_bits
-                    print("addr 0x{:x} -> {} ".format(vm_addr, l2_entry))
-
     def translate_guest_addr(self, guest_addr):
         l2_idx = (guest_addr >> self.header.cluster_bits) % self.nr_l2_entry
         slice_addr = guest_addr & ~((1 << (self.header.cluster_bits + self.l2_clusters_bits_in_slice)) - 1)
