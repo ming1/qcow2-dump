@@ -630,8 +630,7 @@ class Qcow2State():
         for i in range(self.max_refcount_table_entries):
             start = i * 8
             entry = Qcow2RefcountTableEntry(i, self.refcount_table[start : start + 8])
-            if entry.is_allocated():
-                yield entry
+            yield entry
 
     def refcount_blk_entries(self, seq):
         fd = self.fd
@@ -645,17 +644,18 @@ class Qcow2State():
         for i in range(self.nr_refcount_blk_entry):
             refcnt = struct.unpack(ref_fmt, fd.read(buf_size))
             entry = Qcow2RefcountBlockEntry(i, refcnt[0])
-            if entry.is_allocated():
-                yield entry
+            yield entry
     
     def dump_refcount_table(self):
         for refblk_table_entry in self.refcount_table_entries():
-            print(refblk_table_entry)
+            if refblk_table_entry.is_allocated():
+                print(refblk_table_entry)
 
     def dump_refcount_blk(self, seq):
         for refblk_entry in self.refcount_blk_entries(seq):
-            vm_addr = (seq * self.nr_refcount_blk_entry + refblk_entry.seq) << self.header.cluster_bits
-            print("addr 0x{:x} -> {} ".format(vm_addr, refblk_entry))
+            if refblk_entry.is_allocated():
+                vm_addr = (seq * self.nr_refcount_blk_entry + refblk_entry.seq) << self.header.cluster_bits
+                print("addr 0x{:x} -> {} ".format(vm_addr, refblk_entry))
 
     def dump_L1_table(self):
         for l1_entry in self.L1_entries():
