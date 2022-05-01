@@ -75,6 +75,11 @@ def cmd_get_guest_addr_refcount(fd, guest_addr):
     refcnt = qs.get_guest_addr_refcount(guest_addr)
     print("0x{:x}: {}".format(guest_addr, refcnt))
 
+def cmd_get_free_cluster(fd):
+    qs = Qcow2State(fd)
+    cluster = qs.get_free_clusters()
+    print("1st free cluster 0x{:x}".format(cluster))
+
 def cmd_dump_header(fd):
     h = QcowHeader(fd)
     h.dump(is_json)
@@ -185,6 +190,7 @@ cmds = [
     ['dump-refcount-blk', cmd_dump_refcount_blk, 1, 'Dump refcount block'],
     ['translate-guest-addr', cmd_translate_guest_addr, 1, 'translate guest addr'],
     ['refcnt-guest-addr', cmd_get_guest_addr_refcount, 1, 'get refcnt of cluster for guest addr'],
+    ['get-free-cluster', cmd_get_free_cluster, 0, 'get 1st free cluster'],
 ]
 
 def main(filename, cmd, args):

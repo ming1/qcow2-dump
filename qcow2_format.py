@@ -22,7 +22,8 @@ import string
 import json
 
 from utils import (
-    LRUCache
+    LRUCache,
+    fls64
 )
 
 class ComplexEncoder(json.JSONEncoder):
@@ -608,7 +609,13 @@ class Qcow2State():
                 self.header.refcount_table_clusters)
 
         self.l2_cache = LRUCache(self.L2_CACHE_SIZE >> self.L2_CACHE_SLICE_BITS)
+        self.l2_clusters_bits_in_slice = fls64(self.nr_l2_entry >> (
+                self.header.cluster_bits - self.L2_CACHE_SLICE_BITS))
         self.refcnt_blk_cache = LRUCache(self.REFCOUNT_BLK_CACHE_SIZE >> self.REFCOUNT_BLK_CACHE_SLICE_BITS)
+        self.refcnt_blk_clusters_bits_in_slice = fls64(self.nr_refcount_blk_entry >> (
+                self.header.cluster_bits - self.REFCOUNT_BLK_CACHE_SLICE_BITS))
+        #print("refcnt_blk_clusters_bits_in_slice {}, l2_clusters_bits_in_slice {}".format(
+        #  self.refcnt_blk_clusters_bits_in_slice,  self.l2_clusters_bits_in_slice))
 
     def L2_entries(self, seq):
         fd = self.fd
@@ -671,7 +678,7 @@ class Qcow2State():
 
     def translate_guest_addr(self, guest_addr):
         l2_idx = (guest_addr >> self.header.cluster_bits) % self.nr_l2_entry
-        slice_addr = guest_addr & ~((1 << self.L2_CACHE_SLICE_BITS) - 1)
+        slice_addr = guest_addr & ~((1 << (self.header.cluster_bits + self.l2_clusters_bits_in_slice)) - 1)
         #print("l2_idx {} slice_addr: {:x}".format(l2_idx, slice_addr))
         if self.l2_cache.get(slice_addr) == -1:
             l1_idx = (guest_addr >> self.header.cluster_bits) // self.nr_l2_entry
@@ -703,7 +710,7 @@ class Qcow2State():
     #return the refcount_blk entry & refcount
     def get_guest_addr_refcount(self, guest_addr):
         refcnt_blk_idx = (guest_addr >> self.header.cluster_bits) % self.nr_refcount_blk_entry
-        slice_addr = guest_addr & ~((1 << self.REFCOUNT_BLK_CACHE_SLICE_BITS) - 1)
+        slice_addr = guest_addr & ~((1 << (self.header.cluster_bits + self.refcnt_blk_clusters_bits_in_slice)) - 1)
         if self.refcnt_blk_cache.get(slice_addr) == -1:
             refcnt_table_idx = (guest_addr >> self.header.cluster_bits) // self.nr_refcount_blk_entry
             if refcnt_table_idx >= self.max_refcount_table_entries:
@@ -730,3 +737,26 @@ class Qcow2State():
         refcnt = struct.unpack(ref_fmt, refcnt_blk_slice.buf[offset_in_slice: offset_in_slice + buf_size])
 
         return refcnt[0]
+
+    def get_free_clusters(self, nr = 1):
+        last_entry = None
+        for entry in self.refcount_table_entries():
+            if not entry.is_allocated():
+                break
+            last_entry = entry
+
+        size = self.header.cluster_size
+        start = (last_entry.seq * self.nr_refcount_blk_entry) << self.header.cluster_bits
+        #clusters_in_slice = self.nr_refcount_blk_entry >> (self.header.cluster_bits - self.REFCOUNT_BLK_CACHE_SLICE_BITS) 
+        end = start + self.header.cluster_size * self.nr_refcount_blk_entry
+
+        done = 0
+        while start < end:
+            if self.get_guest_addr_refcount(start) == 0:
+                break
+            start += size
+        if start == end:
+            return -1
+        #print("size of refcount_blk cache: {}, items {}".format(
+        #    len(self.refcnt_blk_cache.cache), self.refcnt_blk_cache.cache))
+        return start

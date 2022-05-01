@@ -1,5 +1,52 @@
 from collections import OrderedDict
 
+# find first bit set in a word
+def ffs(val):
+    res = (val & -val).bit_length() - 1
+    return res
+
+# find last bit set in a word
+def fls64(v):
+    if v == 0:
+        return 0
+    result = 0
+
+    if 0xFFFFFFFF00000000 & v:
+        v >>= (1 << 5)
+        result |= (1 << 5)
+    if 0x00000000FFFF0000 & v:
+        v >>= (1 << 4)
+        result |= (1 << 4)
+    if 0x000000000000FF00 & v:
+        v >>= (1 << 3)
+        result |= (1 << 3)
+    if 0x00000000000000F0 & v:
+        v >>= (1 << 2)
+        result |= (1 << 2)
+    if 0x000000000000000C & v:
+        v >>= (1 << 1)
+        result |= (1 << 1)
+    if 0x0000000000000002 & v:
+        result |= (1 << 0)
+    return result
+
+def rounddown_pow_of_two(n):
+        return 1 << (fls64(n) - 1)
+
+def round_up(x, y):
+    mask = y - 1
+    return ((x - 1) | mask) + 1
+
+def round_down(x, y):
+    mask = y - 1
+    return x & ~mask
+
+def is_power_of_2(n):
+    return ((n & (n - 1)) == 0) and n != 0
+
+def clamp(val, lo, hi):
+    return min(max(val, lo), hi)
+
 class LRUCache:
     # initialising capacity
     def __init__(self, capacity: int):
