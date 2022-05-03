@@ -100,6 +100,47 @@ def cmd_get_free_cluster(fd):
     cluster = qs.get_free_clusters()
     print("1st free cluster 0x{:x}".format(cluster))
 
+def cmd_check_l2_and_refcount_blk(fd):
+    qs = Qcow2State(fd)
+    start = 0
+    end = qs.header.size
+
+    #check if all mapped clusters get referred
+    while start < end:
+        l2_entry, offset = qs.translate_guest_addr(start)
+        if l2_entry is None:
+            break
+        refcnt = qs.get_guest_addr_refcount(l2_entry.cluster_offset)
+        if refcnt <= 0:
+            print("check failed: guest offset {}, mapped l2 {}, refcnt of mapped cluseter {}".format(
+                start, l2_entry, refcnt))
+            break
+        start += qs.header.cluster_size
+
+    #check if refcount is correct for each cluster
+    start = 0
+    cluster_ref = {}
+    while start < end:
+        l2_entry, offset = qs.translate_guest_addr(start)
+        if l2_entry is not None and l2_entry.cluster_offset != 0:
+            if l2_entry.cluster_offset in cluster_ref:
+                cluster_ref[l2_entry.cluster_offset] += 1
+            else:
+                cluster_ref[l2_entry.cluster_offset] = 1
+        start += qs.header.cluster_size
+    start = 0
+    while start < end:
+        refcnt = qs.get_guest_addr_refcount(start)
+        if start in cluster_ref:
+            if cluster_ref[start] != refcnt:
+                print("refcount isn't correct: cluster {:x}, ref {}-{}".format(
+                    start, cluster_ref[start], refcnt))
+        else:
+            if refcnt > 0:
+                print("unmapped cluster 0x{:x} ref {} type {}".format(
+                    start, refcnt, qs.get_cluster_type(start)))
+        start += qs.header.cluster_size
+
 def cmd_dump_header(fd):
     h = QcowHeader(fd)
     h.dump(is_json)
@@ -211,6 +252,7 @@ cmds = [
     ['translate-guest-addr', cmd_translate_guest_addr, 1, 'translate guest addr'],
     ['refcnt-guest-addr', cmd_get_guest_addr_refcount, 1, 'get refcnt of cluster for guest addr'],
     ['get-free-cluster', cmd_get_free_cluster, 0, 'get 1st free cluster'],
+    ['check-meta', cmd_check_l2_and_refcount_blk, 0, 'check meta data'],
 ]
 
 def main(filename, cmd, args):

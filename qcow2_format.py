@@ -737,3 +737,21 @@ class Qcow2State():
         #print("size of refcount_blk cache: {}, items {}".format(
         #    len(self.refcnt_blk_cache.cache), self.refcnt_blk_cache.cache))
         return start
+
+    def get_cluster_type(self, cluster):
+        addr = cluster & ~((1 << self.header.cluster_bits) - 1)
+
+        if addr == 0:
+            return "header"
+        elif addr >= self.header.l1_table_offset and addr < self.header.l1_table_offset + self.header.l1_size * 8:
+            return "l1_table"
+        elif addr >= self.header.refcount_table_offset and addr < self.header.refcount_table_offset + self.header.refcount_table_clusters:
+            return "refcount_table"
+        else:
+            for entry in self.L1_entries():
+                if entry.offset == addr:
+                    return "l2_table"
+            for entry in self.refcount_table_entries():
+                if entry.offset == addr:
+                    return "refcount_blk"
+            return "unknown"
