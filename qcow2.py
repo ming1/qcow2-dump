@@ -141,6 +141,27 @@ def cmd_check_l2_and_refcount_blk(fd):
                     start, refcnt, qs.get_cluster_type(start)))
         start += qs.header.cluster_size
 
+def cmd_get_duplicated_cluster(fd):
+    qs = Qcow2State(fd)
+    cls_maps = {}
+    for i in range(qs.header.l1_size):
+        for l2_entry in qs.L2_entries(i):
+            if l2_entry.is_allocated():
+                if l2_entry.cluster_offset in cls_maps:
+                    v = cls_maps[l2_entry.cluster_offset]
+                    v.append((i, l2_entry))
+                else:
+                    cls_maps[l2_entry.cluster_offset] = [(i, l2_entry)]
+    for k, v in cls_maps.items():
+        if len(v) > 1:
+            print("cluster seq #{}: addr 0x{:x} -> ".format(k >> qs.header.cluster_bits, k))
+            for e in v:
+                vaddr = (e[0] * qs.nr_l2_entry + e[1].seq) << qs.header.cluster_bits
+                print("l1 {}: {} / slice({} {}) vaddr 0x{:x}/{:x}".format(
+                    e[0], str(e[1]), e[1].seq // 512, e[1].seq & 511,
+                    vaddr, vaddr & ~((1<<25) - 1)))
+            print()
+
 def cmd_dump_header(fd):
     h = QcowHeader(fd)
     h.dump(is_json)
@@ -253,6 +274,7 @@ cmds = [
     ['refcnt-guest-addr', cmd_get_guest_addr_refcount, 1, 'get refcnt of cluster for guest addr'],
     ['get-free-cluster', cmd_get_free_cluster, 0, 'get 1st free cluster'],
     ['check-meta', cmd_check_l2_and_refcount_blk, 0, 'check meta data'],
+    ['get-duplicated-cluster', cmd_get_duplicated_cluster, 0, 'get duplicated cluster uses in image'],
 ]
 
 def main(filename, cmd, args):
