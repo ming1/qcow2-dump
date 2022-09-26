@@ -489,9 +489,10 @@ class Qcow2L2Entry(Qcow2Struct):
         self.compressed = (self.entry & self.L2_ENTRY_COMPRESSED) >> 62
 
         if self.compressed:
+            entry = self.entry & ~(self.L2_ENTRY_REFCOUNT_ONE | self.L2_ENTRY_COMPRESSED)
             bits = 62 + 8 - header.cluster_bits 
-            self.cluster_offset = self.entry & ((1 << bits) - 1)
-            self.nr_sectors = (self.entry & (~((1 << bits) - 1))) >> bits
+            self.cluster_offset = entry & ((1 << bits) - 1)
+            self.nr_sectors = entry >> bits
         else:
             self.read_as_all_zeros = self.entry & self.L2_ENTRY_READ_AS_ALL_ZEROS
             self.cluster_offset = self.entry & self.L2_ENTRY_OFFSET_OF_CLUSTER
